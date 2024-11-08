@@ -48,7 +48,7 @@ def process_pdfs_single_question():
 
             # Define a function to process a single question
             def process_question(question):
-                user_message = f"Document:\n{text_content}\n\nQuestion:\n{question}\n\nProvide the answer in JSON format."
+                user_message = f"Document:\n{text_content}\n\nQuestion:\n{question}\n\nProvide the answer in JSON format, and when doing so, include the exact text of the question as a key in the JSON."
                 messages = [
                     {"role": "system", "content": role_message},
                     {"role": "user", "content": user_message}
@@ -105,7 +105,7 @@ def process_pdfs_bulk_questions():
 
             # Combine all questions into one prompt
             questions_text = "\n".join(all_questions)
-            prompt_text = f"""Document:\n{text_content}\n\nPlease answer the following questions:\n{questions_text}\n\nProvide the answers in JSON format."""
+            prompt_text = f"""Document:\n{text_content}\n\nPlease answer the following questions:\n{questions_text}\n\nProvide the answer in JSON format, and when doing so, include only the first 10 words of the question without symbols or punctuation as a key in the JSON, because the outputs will be aggregated later with the same keys from another process and they need to match exactly."""
 
             # Prepare messages
             if model_name in simplified_models:
@@ -157,4 +157,4 @@ print(all_questions)
 print(parameters)
 print(questions)
 process_pdfs_bulk_questions()
-process_pdfs_single_question()
+#process_pdfs_single_question()
