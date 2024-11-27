@@ -265,7 +265,7 @@ if st.button("Run"):
             prefixed_parameters = [prefix + param for param in parameters]
 
             # Columns I to Q (indexes 8 to 16) are full questions
-            questions = row_2.iloc[9:35].dropna().tolist()
+            questions = row_2.iloc[9:45].dropna().tolist()
 
             # Combine all questions
             all_questions = prefixed_parameters + questions
