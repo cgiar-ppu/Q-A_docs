@@ -126,7 +126,9 @@ def process_data_single_question(data_df, selected_headers, all_questions):
     results = []
     model_name = 'gpt-4o'  # Adjust as needed
     for idx, row in data_df.iterrows():
-        document_name = f"Row_{idx+1}"
+        # Extract row data to include in the results
+        row_data = row.to_dict()
+
         # Combine selected header content
         text_content = "\n".join([f"{header}: {str(row[header])}" for header in selected_headers])
 
@@ -154,13 +156,14 @@ def process_data_single_question(data_df, selected_headers, all_questions):
                     }
                 )
                 answer = response.choices[0].message.content.strip()
-                return {
-                    'Document': document_name,
+                result = row_data.copy()
+                result.update({
                     'Question': question,
                     'Answer': answer
-                }
+                })
+                return result
             except Exception as e:
-                st.error(f"Error querying OpenAI for {document_name}, question {question}: {e}")
+                st.error(f"Error querying OpenAI for row {idx+1}, question {question}: {e}")
                 return None
 
         # Use ThreadPoolExecutor to process questions in parallel
@@ -173,7 +176,9 @@ def process_data_single_question(data_df, selected_headers, all_questions):
 
     # Save results to session state
     df = pd.DataFrame(results)
-    pivot_df = df.pivot(index='Document', columns='Question', values='Answer').reset_index()
+    # Pivot the dataframe
+    index_columns = [col for col in data_df.columns if col not in ['Question', 'Answer']]
+    pivot_df = df.pivot_table(index=index_columns, columns='Question', values='Answer', aggfunc='first').reset_index()
     st.session_state['single_question_results'] = df
     st.session_state['single_question_pivot'] = pivot_df
     st.success("Single question approach completed.")
@@ -183,7 +188,9 @@ def process_data_bulk_questions(data_df, selected_headers, all_questions):
     model_name = 'o1-preview'  # Adjust as needed
 
     for idx, row in data_df.iterrows():
-        document_name = f"Row_{idx+1}"
+        # Extract row data to include in the results
+        row_data = row.to_dict()
+
         # Combine selected header content
         text_content = "\n".join([f"{header}: {str(row[header])}" for header in selected_headers])
 
@@ -225,12 +232,13 @@ def process_data_bulk_questions(data_df, selected_headers, all_questions):
                     }
                 )
             answer = response.choices[0].message.content.strip()
-            results.append({
-                'Document': document_name,
+            result = row_data.copy()
+            result.update({
                 'Answers': answer
             })
+            results.append(result)
         except Exception as e:
-            st.error(f"Error querying OpenAI for {document_name}: {e}")
+            st.error(f"Error querying OpenAI for row {idx+1}: {e}")
 
     # Save results to session state
     df = pd.DataFrame(results)
@@ -289,8 +297,9 @@ if 'single_question_results' in st.session_state:
 
     # Generate and download unpacked pivoted results
     unpacked_pivot_df = pivot_df.copy()
+    index_columns = data_df.columns.tolist()
     for col in unpacked_pivot_df.columns:
-        if col != 'Document':
+        if col not in index_columns:
             unpacked_pivot_df[col] = unpacked_pivot_df[col].apply(unpack_json_to_text)
             # Remove question text from beginning of answer
             question_text = col
@@ -312,7 +321,7 @@ if 'single_question_results' in st.session_state:
     st.download_button("Download Extracted Answers", data=df_extracted_excel_data, file_name=extracted_output_filename)
 
     # Generate and download pivoted extracted answers
-    df_extracted_pivot = df_extracted.pivot(index='Document', columns='Question', values='Extracted Answer').reset_index()
+    df_extracted_pivot = df_extracted.pivot_table(index=index_columns, columns='Question', values='Extracted Answer', aggfunc='first').reset_index()
     extracted_pivot_output_filename = f'output_single_question_extracted_pivoted_{timestamp}.xlsx'
     df_extracted_pivot_excel_data = get_excel_data(df_extracted_pivot)
     st.download_button("Download Pivoted Extracted Answers", data=df_extracted_pivot_excel_data, file_name=extracted_pivot_output_filename)
