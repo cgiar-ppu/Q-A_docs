@@ -115,15 +115,18 @@ data_file = st.file_uploader("Upload Excel file with data to process", type=['xl
 if data_file is not None:
     data_df = pd.read_excel(data_file)
     headers = data_df.columns.tolist()
+    id_column = st.selectbox("Select ID column for pivoting", headers)
     selected_headers = st.multiselect("Select headers to use for processing", headers)
 else:
     selected_headers = []
+    id_column = None
 
 process_option = st.selectbox("Select process to run", ["Single Question", "Bulk Questions"])
 
 # Define processing functions
 def process_data_single_question(data_df, selected_headers, all_questions):
     results = []
+    prompts = []  # List to store prompts
     model_name = 'gpt-4o'  # Adjust as needed
     for idx, row in data_df.iterrows():
         # Extract row data to include in the results
@@ -142,6 +145,12 @@ def process_data_single_question(data_df, selected_headers, all_questions):
                 {"role": "system", "content": role_message},
                 {"role": "user", "content": user_message}
             ]
+            # Append the prompt details for visibility
+            prompts.append({
+                'Row Index': idx,
+                'Question': question,
+                'Prompt': user_message
+            })
             try:
                 response = client.chat.completions.create(
                     model=model_name,
@@ -181,10 +190,13 @@ def process_data_single_question(data_df, selected_headers, all_questions):
     pivot_df = df.pivot_table(index=index_columns, columns='Question', values='Answer', aggfunc='first').reset_index()
     st.session_state['single_question_results'] = df
     st.session_state['single_question_pivot'] = pivot_df
+    # Save prompts to session state
+    st.session_state['single_question_prompts'] = pd.DataFrame(prompts)
     st.success("Single question approach completed.")
 
 def process_data_bulk_questions(data_df, selected_headers, all_questions):
     results = []
+    prompts = []  # List to store prompts
     model_name = 'o1-preview'  # Adjust as needed
 
     for idx, row in data_df.iterrows():
@@ -211,6 +223,12 @@ def process_data_bulk_questions(data_df, selected_headers, all_questions):
                 {"role": "system", "content": role_message},
                 {"role": "user", "content": prompt_text}
             ]
+
+        # Append the prompt details for visibility
+        prompts.append({
+            'Row Index': idx,
+            'Prompt': prompt_text
+        })
 
         try:
             if model_name in simplified_models:
@@ -243,6 +261,8 @@ def process_data_bulk_questions(data_df, selected_headers, all_questions):
     # Save results to session state
     df = pd.DataFrame(results)
     st.session_state['bulk_question_results'] = df
+    # Save prompts to session state
+    st.session_state['bulk_question_prompts'] = pd.DataFrame(prompts)
     st.success("Bulk question approach completed.")
 
 # Run the selected process
@@ -251,6 +271,8 @@ if st.button("Run"):
     st.session_state.pop('single_question_results', None)
     st.session_state.pop('single_question_pivot', None)
     st.session_state.pop('bulk_question_results', None)
+    st.session_state.pop('single_question_prompts', None)
+    st.session_state.pop('bulk_question_prompts', None)
     try:
         # Initialize OpenAI client (Assuming API key is set in environment variables)
         #client = OpenAI()
@@ -284,6 +306,12 @@ if 'single_question_results' in st.session_state:
     df = st.session_state['single_question_results']
     pivot_df = st.session_state['single_question_pivot']
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    # Display prompts sent
+    if 'single_question_prompts' in st.session_state:
+        st.subheader("Prompts Sent (Single Question)")
+        prompts_df = st.session_state['single_question_prompts']
+        st.dataframe(prompts_df)
 
     # Download original results
     output_filename = f'output_single_question_{timestamp}.xlsx'
@@ -326,9 +354,32 @@ if 'single_question_results' in st.session_state:
     df_extracted_pivot_excel_data = get_excel_data(df_extracted_pivot)
     st.download_button("Download Pivoted Extracted Answers", data=df_extracted_pivot_excel_data, file_name=extracted_pivot_output_filename)
 
+    # Add new buttons for correct pivoted results with ID column only
+    if id_column in df.columns:
+        # Generate and download pivoted results with only ID column
+        pivot_df_id = df.pivot_table(index=[id_column], columns='Question', values='Answer', aggfunc='first').reset_index()
+        pivot_output_filename_id = f'output_single_question_pivoted_ID_{timestamp}.xlsx'
+        pivot_df_id_excel_data = get_excel_data(pivot_df_id)
+        st.download_button("Download Pivoted Results (ID only)", data=pivot_df_id_excel_data, file_name=pivot_output_filename_id)
+
+        # Generate and download pivoted extracted answers with only ID column
+        df_extracted_pivot_id = df_extracted.pivot_table(index=[id_column], columns='Question', values='Extracted Answer', aggfunc='first').reset_index()
+        extracted_pivot_output_filename_id = f'output_single_question_extracted_pivoted_ID_{timestamp}.xlsx'
+        df_extracted_pivot_id_excel_data = get_excel_data(df_extracted_pivot_id)
+        st.download_button("Download Pivoted Extracted Answers (ID only)", data=df_extracted_pivot_id_excel_data, file_name=extracted_pivot_output_filename_id)
+    else:
+        st.error("ID column not found in results.")
+
 if 'bulk_question_results' in st.session_state:
     df = st.session_state['bulk_question_results']
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    # Display prompts sent
+    if 'bulk_question_prompts' in st.session_state:
+        st.subheader("Prompts Sent (Bulk Questions)")
+        prompts_df = st.session_state['bulk_question_prompts']
+        st.dataframe(prompts_df)
+
     output_filename = f'output_bulk_questions_{timestamp}.xlsx'
     df_excel_data = get_excel_data(df)
     st.download_button("Download Results", data=df_excel_data, file_name=output_filename)
