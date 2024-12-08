@@ -2,3 +2,5 @@ openai
 tiktoken
 pandas
 threadpoolctl
+openpyxl
+xlsxwriter
